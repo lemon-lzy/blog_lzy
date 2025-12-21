@@ -8,4 +8,6 @@ category: 'mysql'
 draft: false 
 lang: ''
 ---
+
+![MySQL 示意图](img.png)
 将show warining before running potentially unsafe qurries取消勾选就行
