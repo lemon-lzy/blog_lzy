@@ -1,6 +1,6 @@
 ---
 title: MySQL基础笔记
-published: 2025-3-21
+published: 2025-03-21
 description: '编写了MySQL的一个基本概念及其用法'
 image: "./cover.png"
 tags: ["mysql"]
