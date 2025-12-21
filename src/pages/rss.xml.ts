@@ -56,8 +56,8 @@ export async function GET(context: APIContext) {
 				if (src.startsWith("./")) {
 					// Path relative to the post file directory
 					const prefixRemoved = src.slice(2);
-					// Check if this post is in a subdirectory (like bestimageapi/index.md)
-					const postPath = post.id; // This gives us the full path like "bestimageapi/index.md"
+					// Check if this post is in a subdirectory (like bestimageapi/datagrip-Problem.md)
+					const postPath = post.id; // This gives us the full path like "bestimageapi/datagrip-Problem.md"
 					const postDir = postPath.includes("/")
 						? postPath.split("/")[0]
 						: "";
@@ -75,7 +75,7 @@ export async function GET(context: APIContext) {
 					importPath = `/src/content/${cleaned}`;
 				} else {
 					// Handle direct filename (no ./ prefix) - assume it's in the same directory as the post
-					const postPath = post.id; // This gives us the full path like "bestimageapi/index.md"
+					const postPath = post.id; // This gives us the full path like "bestimageapi/datagrip-Problem.md"
 					const postDir = postPath.includes("/")
 						? postPath.split("/")[0]
 						: "";
