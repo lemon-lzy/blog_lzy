@@ -1,6 +1,6 @@
 ---
 title: 多service运行
-published: 2024-11-21
+published: 2024-11-07
 description: ''
 image: '../cover.png'
 tags: ["idea"]
