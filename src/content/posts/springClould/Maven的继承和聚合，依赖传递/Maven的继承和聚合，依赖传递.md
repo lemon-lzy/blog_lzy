@@ -2,7 +2,7 @@
 title: Maven的继承和聚合，依赖传递
 published: 2024-11-15
 description: ''
-image: './cover.png'
+image: '../cover.png'
 tags: ["maven","微服务"]
 category: 'maven'
 draft: false 
