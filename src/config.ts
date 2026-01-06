@@ -245,7 +245,7 @@ export const navBarConfig: NavBarConfig = {
 			children: [
 				{
 					name: "GitHub",
-					url: "https://github.com/lenmon-lzy",
+					url: "https://github.com/lemon-lzy",
 					external: true,
 					icon: "fa6-brands:github",
 				},
@@ -277,7 +277,7 @@ export const profileConfig: ProfileConfig = {
 		{
 			name: "GitHub",
 			icon: "fa6-brands:github",
-			url: "https://github.com/lenmon-lzy",
+			url: "https://github.com/lemon-lzy",
 		},
 		{
 			name: "Codeberg",
