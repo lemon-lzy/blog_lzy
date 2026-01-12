@@ -131,3 +131,111 @@ MyBatis Flex是一个数据访问层框架，它的作用和 MyBatis Plus 一样
 
 此外，在 Mybatis Flex 中，有了一个名称为 mybatis-flex-codegen 的模块，提供了可以通过数据库表，生成代码的功能。当我们把数据库表设计完成后， 就可以使用其快速生成 Entity、Mapper、Service、Controller 代码，能大幅提高我们的开发效率。
 
+# 前端编写
+## 创建项目
+使用 Vue 官方推荐的脚手架 create-vue 快速创建 Vue3 的项目：https://cn.vuejs.org/guide/quick-start.html
+
+💡 Vue 提供了在线编码测试，可以通过 Playground 来学习 Vue：https://play.vuejs.org/
+
+**创建命令**：
+````
+npm create vue@latest
+````
+
+## 请求生成
+### 1、请求工具库
+安装请求工具类 Axios，参考官方文档 执行命令：
+````
+npm install axios
+````
+
+### 2、全局自定义请求
+需要自定义全局请求地址等，参考 Axios 官方文档，编写请求配置文件 request.ts。包括全局接口请求地址、超时时间、自定义请求响应拦截器等。
+
+响应拦截器的应用场景：我们需要对接口的 通用响应 进行统一处理，比如从 response 中取出 data；或者根据 code 去集中处理错误。这样不用在每个接口请求中都去写相同的逻辑。
+
+比如可以在‍全局响应拦截器中，读取出结果中的 data，并校验 code؜ 是否合法，如果是未登录状态，则自动登录。
+
+示例代码如下，其中 withCredentials: true 一定要写，否则无法在发请求时携带 Cookie，就无法完成登录。
+
+代码如下：
+````
+import axios from 'axios'
+import { message } from 'ant-design-vue'
+
+// 创建 Axios 实例
+const myAxios = axios.create({
+  baseURL: 'http://localhost:8123/api',
+  timeout: 60000,
+  withCredentials: true,
+})
+
+// 全局请求拦截器
+myAxios.interceptors.request.use(
+  function (config) {
+    // Do something before request is sent
+    return config
+  },
+  function (error) {
+    // Do something with request error
+    return Promise.reject(error)
+  },
+)
+
+// 全局响应拦截器
+myAxios.interceptors.response.use(
+  function (response) {
+    const { data } = response
+    // 未登录
+    if (data.code === 40100) {
+      // 不是获取用户信息的请求，并且用户目前不是已经在用户登录页面，则跳转到登录页面
+      if (
+        !response.request.responseURL.includes('user/get/login') &&
+        !window.location.pathname.includes('/user/login')
+      ) {
+        message.warning('请先登录')
+        window.location.href = `/user/login?redirect=${window.location.href}`
+      }
+    }
+    return response
+  },
+  function (error) {
+    // Any status codes that falls outside the range of 2xx cause this function to trigger
+    // Do something with response error
+    return Promise.reject(error)
+  },
+)
+
+export default myAxios
+
+````
+
+### 3、自动生成请求代码
+如果采用传‍统开发方式，针对每个请求都要单独编写代码，很麻烦。
+
+推荐使用 OpenAPI 工具，直接根据后端接口文档自动生成前端请求代码即可，这种方式会比 AI 生成更可控。
+
+按照官方文档的步骤，先安装：
+````
+npm i --save-dev @umijs/openapi
+````
+还需要安装依赖库：
+````
+npm i --save-dev tslib
+````
+在 前端项目根目录 新建 openapi2ts.config.ts，根据自己的需要定制生成的代码：
+````
+export default {
+requestLibPath: "import request from '@/request'",
+schemaPath: 'http://localhost:8123/api/v3/api-docs',
+serversPath: './src',
+}
+````
+注意，要将‍ schemaPath 改为自己后端服务提供的 Swagge؜r 接口文档的地址，生成前确保后端已启动！
+
+在 package.json 的 scripts 中添加 "openapi2ts": "openapi2ts"。
+
+执行脚本即‍可生成请求代码，还包括 TypeScript 类型：
+
+### 4.根据请求接口，配合ai生成前端页面
+前端请求后端接口都在api包下，我们可以让ai根据该包的请求接口，配合我们描述的页面逻辑生成可以请求后端的代码。
