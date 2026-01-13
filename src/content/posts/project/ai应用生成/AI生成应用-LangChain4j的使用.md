@@ -143,16 +143,22 @@ LangChain4j 是目前主流的 Java AI 开发框架。؜我看重它的 3 大优
 ![img_3.png](img_3.png)
 在 pom.xml 中添加依赖：
 ````
-<dependency>
-    <groupId>dev.langchain4j</groupId>
-    <artifactId>langchain4j</artifactId>
-    <version>1.1.0</version>
-</dependency>
-<dependency>
-    <groupId>dev.langchain4j</groupId>
-    <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
-    <version>1.1.0-beta7</version>
-</dependency>
+<!--langchain4j-->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
+            <version>1.10.0-beta18</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>1.10.0</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>1.10.0</version>
+        </dependency>
 ````
 为了保护敏感信息，我们需要在 **.gitignore** 中添加本地配置文件 application-local.yml，忽略该文件的提交，之后就可以放心地将敏感配置都写在这个文件里了。
 ````
@@ -196,5 +202,242 @@ public interface AiCodeGeneratorService {
 ![img_6.png](img_6.png)
 最后，编写单元测试来验证功能：
 ![img_7.png](img_7.png)
+结果调用成功：
+![img_8.png](img_8.png)
+
+## 3.结构化输出
+虽然已经能够调用 AI 生成代码，但直接返回字符串的方式不便于后续解析代码并保存为文件。因此我们需要将 AI 的输出转换为结构化的对象，利用 LangChain4j 的结构化输出 特性可以轻松实现。
+
+**基本实现**
+
+1）创建生成结果类，用于封装 AI 返回的内容：
 
 
+单文件：
+````
+@Data
+public class HtmlCodeResult {
+
+    private String htmlCode;
+
+    private String description;
+}
+````
+多文件：
+````
+@Data
+public class MultiFileCodeResult {
+
+    private String htmlCode;
+
+    private String cssCode;
+
+    private String jsCode;
+
+    private String description;
+}
+````
+2）修改 AI 服务接口，让方法返回结构化对象：
+![img_9.png](img_9.png)
+但是在实际‍测试中出现了报错，AI 好像并没有乖乖地返回我们预期的؜ JSON 格式！
+### 优化技巧
+经过研究和‍实践，我总结了4个关键的优化技巧，来提高结构化输出؜的准确度和稳定性。
+
+1）设置 max_tokens
+
+参考 DeepSeek 官方文档 的建议，设置一下输出长度，防止 AI 生成的 JSON 被半路截断：
+![img_10.png](img_10.png)
+注意不要超出模型的限制：
+![img_11.png](img_11.png)
+在项目配置文件中添加：
+````
+langchain4j:
+  open-ai:
+    chat-model:
+      max-tokens: 8192
+````
+2）JSON Schema 配置
+
+OpenAI 相关文档 提到了 response_format_json_schema 配置，可以严格确保结构化输出生效：
+
+可以在项目中使用这个配置：
+````
+langchain4j:
+  open-ai:
+    chat-model:
+      strict-json-schema: true
+      response-format: json_object
+````
+3）添加字段描述
+
+参考 [LangChain4j 文档](https://docs.langchain4j.dev/tutorials/structured-outputs/#adding-description-1)，为结果类和属性添加详细的描述信息，便于 AI 理解：
+````
+@Description("生成 HTML 代码文件的结果")
+@Data
+public class HtmlCodeResult {
+
+    @Description("HTML代码")
+    private String htmlCode;
+
+    @Description("生成代码的描述")
+    private String description;
+}
+````
+````
+@Description("生成多个代码文件的结果")
+@Data
+public class MultiFileCodeResult {
+
+    @Description("HTML代码")
+    private String htmlCode;
+
+    @Description("CSS代码")
+    private String cssCode;
+
+    @Description("JS代码")
+    private String jsCode;
+
+    @Description("生成代码的描述")
+    private String description;
+}
+````
+再次运行测‍试，可以看到提示词中自动补充了字段描述和配置信息：
+![img_12.png](img_12.png)
+4）提示词优化
+
+最后一个技‍巧是在系统提示词中明确要求输出 JSON 格式，这样可؜以进一步提高成功率。
+## 4.代码完善及其程序优化 ---门面模式
+有了结构化‍的输出对象，接下来就是将生成的代码保存到本地文件系统。
+### 业务逻辑：
+- 生成并创建唯一本地文件夹（一个文件夹表示一次生成）
+- 然后在对应文件夹创建单个/多个文件，将代码写入文件
+#### 生成并创建唯一本地文件夹（一个文件夹表示一次生成）
+````
+    /**
+     * 构建唯一目录路径：tmp/code_output/bizType_雪花ID
+     */
+    private static String buildUniqueDir(String bizType) {
+        String uniqueDirName = StrUtil.format("{}_{}", bizType, IdUtil.getSnowflakeNextIdStr());
+        String dirPath = FILE_SAVE_ROOT_DIR + File.separator + uniqueDirName;
+        FileUtil.mkdir(dirPath);
+        return dirPath;
+    }
+````
+如果是单文件，则通过FileUtils.mkdir配合hutool雪花算法生成唯一id生成：html_雪花ID;
+
+如果是单文件，则通过FileUtils.mkdir配合hutool雪花算法生成唯一id生成：multi_file_雪花ID;
+#### 然后在对应文件夹创建单个/多个文件，将代码写入文件
+````
+/**
+     * 写入单个文件
+     */
+    private static void writeToFile(String dirPath, String filename, String content) {
+        String filePath = dirPath + File.separator + filename;
+        FileUtil.writeString(content, filePath, StandardCharsets.UTF_8);
+    }
+````
+如果是单文件，则调用一次该方法，创建文件并写入内容:
+````
+   /**
+     * 保存 HtmlCodeResult
+     */
+    public static File saveHtmlCodeResult(HtmlCodeResult result) {
+        String baseDirPath = buildUniqueDir(CodeGenTypeEnum.HTML.getValue());
+        writeToFile(baseDirPath, "index.html", result.getHtmlCode());
+        return new File(baseDirPath);
+    }
+````
+如果是多文件，则调用三次该方法，创建文件并写入内容
+````
+/**
+     * 保存 MultiFileCodeResult
+     */
+    public static File saveMultiFileCodeResult(MultiFileCodeResult result) {
+        String baseDirPath = buildUniqueDir(CodeGenTypeEnum.MULTI_FILE.getValue());
+        writeToFile(baseDirPath, "index.html", result.getHtmlCode());
+        writeToFile(baseDirPath, "style.css", result.getCssCode());
+        writeToFile(baseDirPath, "script.js", result.getJsCode());
+        return new File(baseDirPath);
+    }
+````
+记得将 tmp 目录添加到 .gitignore 中，避免生成的文件被提交到代码仓库。
+### 门面模式优化
+前面我们有两种保存代码的文件，一种是单文件保存（html），一种是多文件保存(html,css,js)
+
+为了统一管理生成和保存的逻辑，可以使用**门面模式**这一设计模式。
+
+门面模式通过‍提供一个统一的高层接口来隐藏子系统的复杂性，让客户端只需要与这个简؜化的接口交互，而不用了解内部的复杂实现细节。
+![img_13.png](img_13.png)
+- 大白话就是说我们不需要去判断并调用ai生成信息的方法，然后再去调用保存代码的方法，而且统一一个门面，.
+- 无论是单文件还是多文件，都只需要调用这个门面就能生成并且保存，不需要知道内部的实现细节
+#### 代码实现：
+````
+/**
+ * AI 代码生成外观类，组合生成和保存功能
+ */
+@Service
+public class AiCodeGeneratorFacade {
+
+    @Resource
+    private AiCodeGeneratorService aiCodeGeneratorService;
+
+    /**
+     * 统一入口：根据类型生成并保存代码
+     *
+     * @param userMessage     用户提示词
+     * @param codeGenTypeEnum 生成类型
+     * @return 保存的目录
+     */
+    public File generateAndSaveCode(String userMessage, CodeGenTypeEnum codeGenTypeEnum) {
+        if (codeGenTypeEnum == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
+        }
+        return switch (codeGenTypeEnum) {
+            case HTML -> generateAndSaveHtmlCode(userMessage);
+            case MULTI_FILE -> generateAndSaveMultiFileCode(userMessage);
+            default -> {
+                String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, errorMessage);
+            }
+        };
+    }
+
+    /**
+     * 生成 HTML 模式的代码并保存
+     *
+     * @param userMessage 用户提示词
+     * @return 保存的目录
+     */
+    private File generateAndSaveHtmlCode(String userMessage) {
+        HtmlCodeResult result = aiCodeGeneratorService.generateHtmlCode(userMessage);
+        return CodeFileSaver.saveHtmlCodeResult(result);
+    }
+
+    /**
+     * 生成多文件模式的代码并保存
+     *
+     * @param userMessage 用户提示词
+     * @return 保存的目录
+     */
+    private File generateAndSaveMultiFileCode(String userMessage) {
+        MultiFileCodeResult result = aiCodeGeneratorService.generateMultiFileCode(userMessage);
+        return CodeFileSaver.saveMultiFileCodeResult(result);
+    }
+}
+````
+#### 效果
+````
+@SpringBootTest
+class AiCodeGeneratorFacadeTest {
+
+    @Resource
+    private AiCodeGeneratorFacade aiCodeGeneratorFacade;
+
+    @Test
+    void generateAndSaveCode() {
+        File file = aiCodeGeneratorFacade.generateAndSaveCode("任务记录网站", CodeGenTypeEnum.MULTI_FILE);
+        Assertions.assertNotNull(file);
+    }
+}
+````
+看，测试类调用是不是比我们之前调用简洁多了！
