@@ -2,7 +2,7 @@
 title: AI-用户模块
 published: 2026-01-08
 description: ''
-image: ''
+image: './cover.png'
 tags: ["项目"]
 category: '项目'
 draft: false 
