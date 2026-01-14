@@ -441,3 +441,293 @@ class AiCodeGeneratorFacadeTest {
 }
 ````
 看，测试类调用是不是比我们之前调用简洁多了！
+
+# 五、SSE 流式输出优化
+这一步，基本‍的代码生成功能已经可以正常工作了。但是我们发现了一个问题：结构化输出的速度比较慢，用؜户需要等待较长时间才能看到结果，这种体验显然不够好。
+
+为了提升用户‍体验，需要引入 SSE（Server-Sent Events）流式输出，؜像打字机一样，AI 返回一个词，前端输出一个词。
+
+## 方案选择
+目前流式输出不支持结构化输出，但我们可以在流式返回的过程中 拼接 AI 的返回结果（可以实时返回给前端），等全部输出完成后，再对拼接结果进行解析和保存。这样既保证了实时性，又不影响最终的处理流程。
+
+在实现 SSE 的技术方案上，LangChain4j 提供了两种؜方式：
+
+### 1、LangChain4j + Reactor（推荐）
+Reactor 是指响‍应式编程，LangChain4j 提供了响应式编程依赖包，可以直接把 AI 返回的内容封装为更通用的 Flux 响应式对象。可以把 ؜Flux 想象成一个数据流，有了这个对象后，上游发来一块数据，下游就能处理一块数据。
+![img_14.png](img_14.png)
+我们可以对 Flux 对象进行下列操作：
+![img_15.png](img_15.png)
+这种方案的‍优点是与前端集成更方便，通过 Flux对象可以很容易地将流؜式内容返回给前端。缺点是需要引入额外的依赖
+````
+<dependency>
+  <groupId>dev.langchain4j</groupId>
+  <artifactId>langchain4j-reactor</artifactId>
+  <version>1.1.0-beta7</version>
+</dependency>
+````
+### 2、TokenStream
+这是 LangChain4j 的原生实现方式，好处是提供了更多高级回调，比如工具调用完成回调（onToolExecuted）、工具调用内容实时响应。؜但缺点是使用起来相对复杂，而且要返回前端时还需要用 Flux 包装一层。
+
+示例代码：
+````
+return Flux.create(sink -> {
+    StringBuilder respContent = new StringBuilder();
+    assistant.chat(finalUserPrompt) // 返回 tokenStream
+    .onPartialResponse(partialResponse -> {
+        log.info("partialResponse: {}", partialResponse);
+        sink.next(partialResponse);
+    })
+    .onCompleteResponse(completeResponse -> {
+        log.info("chatResponse: {}", completeResponse);
+        sink.complete();
+    })
+    .onToolExecuted(toolExecution -> {
+        log.info("tool executed successfully: {}", toolExecution);
+    })
+    .onError(sink::error)
+    .start();
+});
+````
+我最终选择‍了方案 1，因为它更适合我们目前的使用场景.
+
+## 开发实现：
+1）首先配置流式模型：
+````
+langchain4j:
+open-ai:
+streaming-chat-model:
+base-url: https://api.deepseek.com
+api-key: <Your API Key>
+model-name: deepseek-chat
+max-tokens: 8192
+log-requests: true
+log-responses: true
+````
+2）在创建AI Service的工厂类中注入流式模型
+````
+@Configuration
+public class AiCodeGeneratorServiceFactory {
+
+    @Resource
+    private ChatModel chatModel;
+
+    @Resource
+    private StreamingChatModel streamingChatModel;
+
+    @Bean
+    public AiCodeGeneratorService aiCodeGeneratorService() {
+        return AiServices.builder(AiCodeGeneratorService.class)
+                .chatModel(chatModel)
+                .streamingChatModel(streamingChatModel)
+                .build();
+    }
+}
+````
+3）在 AI Service 中新增流式方法，跟之前方法的区别在؜于返回值改为了 Flux<String> 对象：
+
+**解释**：
+-  AI 生成内容的分片字符串：大模型生成回答时不是一次性返回全部内容，而是按 “字符 / 句子 / 段落” 拆分，每生成一小段就推送一个 String 元素到 Flux 中。
+- 例如：AI 要生成 “响应式编程是基于数据流的编程范式”，可能会分 3 个分片返回：
+- 第一个元素："响应式编程是"
+- 第二个元素："基于数据流的"
+- 第三个元素："编程范式"
+````
+/**
+ * 生成 HTML 代码（流式）
+ *
+ * @param userMessage 用户消息
+ * @return 生成的代码结果
+ */
+@SystemMessage(fromResource = "prompt/codegen-html-system-prompt.txt")
+Flux<String> generateHtmlCodeStream(String userMessage);
+
+/**
+ * 生成多文件代码（流式）
+ *
+ * @param userMessage 用户消息
+ * @return 生成的代码结果
+ */
+@SystemMessage(fromResource = "prompt/codegen-multi-file-system-prompt.txt")
+Flux<String> generateMultiFileCodeStream(String userMessage);
+````
+4）编写解析逻辑。
+
+由于流式输‍出返回的是字符串片段，我们需要在 AI 全部返回完成后进؜行解析。
+````
+/**
+ * 代码解析器
+ * 提供静态方法解析不同类型的代码内容
+ *
+ * @author yupi
+ */
+public class CodeParser {
+
+    private static final Pattern HTML_CODE_PATTERN = Pattern.compile("```html\\s*\\n([\\s\\S]*?)```", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CSS_CODE_PATTERN = Pattern.compile("```css\\s*\\n([\\s\\S]*?)```", Pattern.CASE_INSENSITIVE);
+    private static final Pattern JS_CODE_PATTERN = Pattern.compile("```(?:js|javascript)\\s*\\n([\\s\\S]*?)```", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * 解析 HTML 单文件代码
+     */
+    public static HtmlCodeResult parseHtmlCode(String codeContent) {
+        HtmlCodeResult result = new HtmlCodeResult();
+        // 提取 HTML 代码
+        String htmlCode = extractHtmlCode(codeContent);
+        if (htmlCode != null && !htmlCode.trim().isEmpty()) {
+            result.setHtmlCode(htmlCode.trim());
+        } else {
+            // 如果没有找到代码块，将整个内容作为HTML
+            result.setHtmlCode(codeContent.trim());
+        }
+        return result;
+    }
+
+    /**
+     * 解析多文件代码（HTML + CSS + JS）
+     */
+    public static MultiFileCodeResult parseMultiFileCode(String codeContent) {
+        MultiFileCodeResult result = new MultiFileCodeResult();
+        // 提取各类代码
+        String htmlCode = extractCodeByPattern(codeContent, HTML_CODE_PATTERN);
+        String cssCode = extractCodeByPattern(codeContent, CSS_CODE_PATTERN);
+        String jsCode = extractCodeByPattern(codeContent, JS_CODE_PATTERN);
+        // 设置HTML代码
+        if (htmlCode != null && !htmlCode.trim().isEmpty()) {
+            result.setHtmlCode(htmlCode.trim());
+        }
+        // 设置CSS代码
+        if (cssCode != null && !cssCode.trim().isEmpty()) {
+            result.setCssCode(cssCode.trim());
+        }
+        // 设置JS代码
+        if (jsCode != null && !jsCode.trim().isEmpty()) {
+            result.setJsCode(jsCode.trim());
+        }
+        return result;
+    }
+
+    /**
+     * 提取HTML代码内容
+     *
+     * @param content 原始内容
+     * @return HTML代码
+     */
+    private static String extractHtmlCode(String content) {
+        Matcher matcher = HTML_CODE_PATTERN.matcher(content);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+
+    /**
+     * 根据正则模式提取代码
+     *
+     * @param content 原始内容
+     * @param pattern 正则模式
+     * @return 提取的代码
+     */
+    private static String extractCodeByPattern(String content, Pattern pattern) {
+        Matcher matcher = pattern.matcher(content);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+}
+````
+5）在 AiCodeGeneratorFacade 中添加流式调用 AI 的方法。
+
+- 针对每种生成模‍式，分别提供一个 “生成代码并保存” 的方法，核心逻辑都是：拼接 AI 实时响应的字؜符串，并在 流式返回完成后解析字符串并保存代码文件。
+- 编写统一入口，根据生成模式枚举选择对应的流式方法
+
+代码如下：
+````
+/**
+ * 统一入口：根据类型生成并保存代码（流式）
+ *
+ * @param userMessage     用户提示词
+ * @param codeGenTypeEnum 生成类型
+ */
+public Flux<String> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum) {
+    if (codeGenTypeEnum == null) {
+        throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
+    }
+    return switch (codeGenTypeEnum) {
+        case HTML -> generateAndSaveHtmlCodeStream(userMessage);
+        case MULTI_FILE -> generateAndSaveMultiFileCodeStream(userMessage);
+        default -> {
+            String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, errorMessage);
+        }
+    };
+}
+
+/**
+ * 生成 HTML 模式的代码并保存（流式）
+ *
+ * @param userMessage 用户提示词
+ * @return 保存的目录
+ */
+private Flux<String> generateAndSaveHtmlCodeStream(String userMessage) {
+    Flux<String> result = aiCodeGeneratorService.generateHtmlCodeStream(userMessage);
+    // 当流式返回生成代码完成后，再保存代码
+    StringBuilder codeBuilder = new StringBuilder();
+    return result
+            .doOnNext(chunk -> {
+                // 实时收集代码片段
+                codeBuilder.append(chunk);
+            })
+            .doOnComplete(() -> {
+                // 流式返回完成后保存代码
+                try {
+                    String completeHtmlCode = codeBuilder.toString();
+                    HtmlCodeResult htmlCodeResult = CodeParser.parseHtmlCode(completeHtmlCode);
+                    // 保存代码到文件
+                    File savedDir = CodeFileSaver.saveHtmlCodeResult(htmlCodeResult);
+                    log.info("保存成功，路径为：" + savedDir.getAbsolutePath());
+                } catch (Exception e) {
+                    log.error("保存失败: {}", e.getMessage());
+                }
+            });
+}
+
+/**
+ * 生成多文件模式的代码并保存（流式）
+ *
+ * @param userMessage 用户提示词
+ * @return 保存的目录
+ */
+private Flux<String> generateAndSaveMultiFileCodeStream(String userMessage) {
+    Flux<String> result = aiCodeGeneratorService.generateMultiFileCodeStream(userMessage);
+    // 当流式返回生成代码完成后，再保存代码
+    StringBuilder codeBuilder = new StringBuilder();
+    return result
+            .doOnNext(chunk -> {
+                // 实时收集代码片段
+                codeBuilder.append(chunk);
+            })
+            .doOnComplete(() -> {
+                // 流式返回完成后保存代码
+                try {
+                    String completeMultiFileCode = codeBuilder.toString();
+                    MultiFileCodeResult multiFileResult = CodeParser.parseMultiFileCode(completeMultiFileCode);
+                    // 保存代码到文件
+                    File savedDir = CodeFileSaver.saveMultiFileCodeResult(multiFileResult);
+                    log.info("保存成功，路径为：" + savedDir.getAbsolutePath());
+                } catch (Exception e) {
+                    log.error("保存失败: {}", e.getMessage());
+                }
+            });
+}
+````
+**非流式**： 生成->保存到文件
+**流式**: 返回字符串片段->拼接->解析->保存
+
+6）编写单元测试验证流式功能：
+![img_17.png](img_17.png)
+查看生成的网站效果：
+![img_16.png](img_16.png)
+
+
+
