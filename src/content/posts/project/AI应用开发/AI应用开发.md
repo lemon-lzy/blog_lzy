@@ -2,7 +2,7 @@
 title: AI应用开发
 published: 2025-09-20
 description: ''
-image: ''
+image: '../cover.png'
 tags: ["AI"]
 category: 'AI'
 draft: false 
