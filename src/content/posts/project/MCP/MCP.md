@@ -1,6 +1,6 @@
 ---
 title: MCP
-published: 2026-09-24
+published: 2025-09-24
 description: ''
 image: '../cover.png'
 tags: ["AI"]

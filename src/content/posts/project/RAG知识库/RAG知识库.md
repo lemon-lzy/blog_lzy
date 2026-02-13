@@ -1,6 +1,6 @@
 ---
 title: RAG知识库
-published: 2026-09-21
+published: 2025-09-21
 description: '../cover.png'
 image: ''
 tags: ["AI"]

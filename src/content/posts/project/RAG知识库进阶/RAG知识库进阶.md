@@ -1,6 +1,6 @@
 ---
 title: RAG知识库进阶
-published: 2026-09-22
+published: 2025-09-22
 description: ''
 image: '../cover.png'
 tags: ["AI"]
