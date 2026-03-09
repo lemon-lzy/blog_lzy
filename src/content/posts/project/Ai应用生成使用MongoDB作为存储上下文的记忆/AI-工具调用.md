@@ -1,10 +1,10 @@
 ---
 title: Ai应用生成使用MongoDB作为存储上下文的记忆
-published: 2025-09-23
+published: 2026-03-09
 description: ''
 image: '../cover.png'
-tags: ["AI"]
-category: 'AI'
+tags: ["project"]
+category: 'project'
 draft: false 
 lang: ''
 ---
