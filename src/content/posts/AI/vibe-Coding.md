@@ -2,7 +2,7 @@
 title: vibe-Coding
 published: 2026-03-20
 description: ''
-image: '../cfover.png'
+image: '../cover.png'
 tags: ["AI"]
 category: 'AI'
 draft: false 
