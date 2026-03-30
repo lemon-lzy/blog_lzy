@@ -33,7 +33,7 @@ export const timelineData: TimelineItem[] = [
 		startDate: "2022-09-01",
 		location: "Beijing",
 		organization: "Beijing Institute of Technology",
-		skills: ["Java", "Python", "JavaScript", "HTML/CSS", "MySQL"],
+		skills: ["Java", "Python", "JavaScript", "HTML/CSS", "MySQL八股"],
 		achievements: [
 			"Current GPA: 3.6/4.0",
 			"Completed data structures and algorithms course project",
@@ -127,7 +127,7 @@ export const timelineData: TimelineItem[] = [
 		type: "project",
 		startDate: "2023-11-01",
 		endDate: "2023-12-15",
-		skills: ["Java", "MySQL", "Swing", "JDBC"],
+		skills: ["Java", "MySQL八股", "Swing", "JDBC"],
 		achievements: [
 			"Received excellent course project grade",
 			"Implemented complete CRUD functionality",
