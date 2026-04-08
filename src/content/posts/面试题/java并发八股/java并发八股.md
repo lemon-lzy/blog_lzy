@@ -614,6 +614,15 @@ class Business implements Runnable {
     }
 }
 ````
+# Synchronized和ReentrantLock之间的区别？
+### 1. 实现的方式不同
+Synchronized是通过锁监视器和对象头的MarkWord进行实现的，ReentrantLock是通过AQS实现的。
+### 2. 加锁和释放锁不同
+Synchronized的话线程执行到被Synchronized修饰的方法和代码块时会自己加锁释放锁，ReentrantLock需要手动调用tryLock(),unLock（）方法进行加锁解锁
+### 3. 锁的公平性：
+Synchronized只支持非公平锁，ReentrantLock支持公平锁和非公平锁。
+### 4，锁的功能不同：
+ReentrantLock支持更多的功能，比如锁中断和锁超时机制。
 
 # Volatile
 ## 概念

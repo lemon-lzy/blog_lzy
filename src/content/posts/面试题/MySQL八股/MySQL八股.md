@@ -482,6 +482,69 @@ InnoDB 存储引擎在 RR 级别下通过 MVCC 和 Next-key Lock (临键锁)
 
 # 分库分表
 
+# mysql如果有很大的数据（1000w+），怎么优化？
+## 索引优化
+1. 首先在索引方面可以给经常查询，区分度高的字段加索引。同时避免索引失效；
+2. 还有加合适的索引，比如内容长的可以加前缀索引；
+3. 还有可以建立联合索引，在查询时保证索引覆盖，避免回表
+## 分库分表
+### 定义
+分库分表就是把原本存在一个数据库或一张表里的数据，拆散到多个数据库或多张表里去。目的很直接：单机扛不住了就加机器，单表太大了就拆小表。
+### 策略
+1）**水平分表**：同一张表的数据按行拆分，比如按用户 ID 取模，user_0、user_1、user_2 这样分。每张表结构一模一样，只是数据不同。
 
+2）**垂直分表**：把一张宽表的列拆开，常用字段放一张表，不常用的大字段单独拎出去。比如用户表拆成 user_base 存用户名、手机号，user_detail 存个人简介、头像这些占空间的字段。
 
+3）**水平分库**：表结构复制到多个数据库实例，数据按规则分散存储。比如电商订单按用户 ID 哈希到 order_db_0、order_db_1、order_db_2 三个库。
+
+4）**垂直分库**：按业务模块拆库，用户相关的放 user_db，订单相关的放 order_db，商品相关的放 product_db。微服务架构下基本都是这么干的。
+
+### 中间件实现：
+**ShardingSphere**：Apache旗下的一个分布式数据库中间件。
+````
+spring:
+  shardingsphere:
+    datasource:
+      names: ds0,ds1
+      ds0: # 数据源1配置
+        type: com.zaxxer.hikari.HikariDataSource
+        driver-class-name: com.mysql.jdbc.Driver
+        jdbc-url: jdbc:mysql://localhost:3306/db0
+        username: root
+        password: password
+      ds1: # 数据源2配置
+        type: com.zaxxer.hikari.HikariDataSource
+        driver-class-name: com.mysql.jdbc.Driver
+        jdbc-url: jdbc:mysql://localhost:3306/db1
+        username: root
+        password: password
+    sharding:
+      tables:
+        t_order: # 订单表(逻辑表名)
+          actual-data-nodes: ds$->{0..1}.t_order_$->{0..15} # 分为2个库，每个库16张表
+          database-strategy:
+            inline:
+              sharding-column: user_id
+              algorithm-expression: ds$->{user_id % 2} # 按user_id分库
+          table-strategy:
+            inline:
+              sharding-column: order_id
+              algorithm-expression: t_order_$->{order_id % 16} # 按order_id分表（分表策略）
+````
+查询直接使用逻辑表名进行查询就行了。
+### 常见分表策略：
+- id取模分表
+- 按时间，比如每一个月一个表，那就将数据的创建时间的YYYMMM格式进行分表
+- 用户名分表（将用户名分64张表，就将用户名进行hashCode()然后取模64）
+
+## 冷热数据源分离
+- 比如把 3 个月前的数据迁移到归档表，主表只保留热数据
+- 一张 5000 万的表，归档后主表可能就剩 500 万，查询性能直接提升一个量级。
+
+## 架构层面
+- 使用读写分离，读用从库，写用主库，分担压力。
+- 库引入Redis缓存热点数据
+
+# 事务里有读有写，怎么处理路由？
+回答：事务必须走单连接，不能拆到主从两边。主流框架的做法是检测到开启事务后，所有操作都路由到主库，直到事务提交或回滚。ShardingSphere 默认就是这个行为，
 
