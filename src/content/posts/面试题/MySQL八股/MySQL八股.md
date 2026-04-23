@@ -625,7 +625,7 @@ MySQL 默认是异步复制，主库写完 binlog 就直接返回，压根不管
 同步复制要等所有从库都确认收到才返回，一般没人用，太慢了。
 
 ## binlog 有几种格式，它们有什么区别？
-binlog 有 statement、row、mixed 三种格式：
+**binlog 有 statement、row、mixed 三种格式：**
 
 - **statement**：记录原始 SQL，日志体积小，但函数、时间等可能导致主从不一致。
 - **row**：记录行数据变更前后内容，一致性最强，日志稍大，是生产推荐。
