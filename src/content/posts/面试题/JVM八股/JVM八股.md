@@ -1,8 +1,8 @@
 ---
 title: JVM八股
 published: 2025-11-30
-description: '../cover.png'
-image: ''
+description: 'JVM '
+image: '../cover.png'
 tags: ["八股"]
 category: '八股'
 draft: false 
