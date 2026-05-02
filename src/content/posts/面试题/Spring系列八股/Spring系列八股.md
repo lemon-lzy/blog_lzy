@@ -316,7 +316,7 @@ Spring的隔离级别有:
 - **@Bean：**配合@Configuration注解标注在方法上，将方法返回值注入Spring容器。
 - **@Component：**标注在类上，被Spring扫描后将类实例注入容器。
 
-# #@Component系列注解的区别？
+# @Component系列注解的区别？
 - Component系列注解指的是：@Component,@Controller,@Service,@Repository
 - 本质没有任何区别，都是为了更好的区分业务
 
